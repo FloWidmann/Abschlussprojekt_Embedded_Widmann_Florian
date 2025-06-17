@@ -1,3 +1,4 @@
+#include <main.h>
 #include <stm32f0xx.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,17 +8,29 @@
 #include "fifo.h"
 
 #define LOG(msg...) printf(msg)
-
 // Select the Baudrate for the UART
 #define BAUDRATE 115200 // Baud rate set to 9600 baud per second
 
+
+volatile Fifo_t usart_rx_fifo;
+const uint8_t USART2_RX_PIN = 3; // PA3 is used as USART2_RX
+const uint8_t USART2_TX_PIN = 2; // PA2 is used as USART2_TX
+
+
+typedef enum State
+{
+  INIT,
+  GETTING_ATTACKED,
+  ATTACKING,
+  END
+
+}State;
+
 void init_uart()
 {
-    SystemClock_Config(); // Configure the system clock to 48 MHz
-
+   SystemClock_Config(); // Configure the system clock to 48 MHz
   RCC->AHBENR |= RCC_AHBENR_GPIOAEN;    // Enable GPIOA clock
   RCC->APB1ENR |= RCC_APB1ENR_USART2EN; // Enable USART2 clock
-
   GPIOA->MODER |= 0b10 << (USART2_TX_PIN * 2);    // Set PA2 to Alternate Function mode
   GPIOA->AFR[0] |= 0b0001 << (4 * USART2_TX_PIN); // Set AF for PA2 (USART2_TX)
   GPIOA->MODER |= 0b10 << (USART2_RX_PIN * 2);    // Set PA3 to Alternate Function mode
@@ -51,52 +64,58 @@ int _write(int handle, char* data, int size) {
   return size;
 }
 
-volatile Fifo_t usart_rx_fifo;
 
-const uint8_t USART2_RX_PIN = 3; // PA3 is used as USART2_RX
-const uint8_t USART2_TX_PIN = 2; // PA2 is used as USART2_TX
-char messageBuffer[10];
-
-void crop_start_message(char* inputMessage)
-{
-    for(int i = 0; i < strlen(inputMessage); i++)
-    {
-      if(inputMessage[i] == '\n') inputMessage[i] = '\0';
+void clean_message(char* inputMessage, int max_size) {
+    for(int i = 0; i < max_size; i++) {
+        if(inputMessage[i] == '\n') {
+            inputMessage[i] = '\0';
+            break;        }
     }
 }
 
-bool compare_message(char* croppedMessage)
-{
-  if(strcmp(croppedMessage, "HD_Start")) return true;
-  return false;
-}
+
+
+
 
 
 int main(void)
 {
+  char messageBuffer[10] = { 0 }; //not const char* as usual because we have different chars
+  int diff = 0;
+  LOG("Init System");
   init_uart();
-
-  uint32_t bytes_recv = 0;
+  uint32_t bytesReceived = 0;
+  State gameState = INIT;
   bool canReceive = false;
+  bool canSend = false;
 
   for (;;)
   { // Infinite loop
-    //LOG(" ");
+    switch (gameState)
+    {
+    case(INIT):
+    {
     uint8_t byte;
     if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0)
     {
-      //LOG("Byte");
+      //for now this works, look for better solution
       if(byte == 72) canReceive = true;
-      if(bytes_recv < 10 && canReceive) messageBuffer[bytes_recv] = byte;
+      if(bytesReceived < 10 && canReceive) messageBuffer[bytesReceived] = byte;
       else
       {
-        crop_start_message(messageBuffer);
+        clean_message(messageBuffer, 10);
+        if(strcmp(messageBuffer, "HD_START\r") == 0) 
+        {
+          gameState = ATTACKING;
+        }
       }
-      if(byte == 10) canReceive = false;
-      
-      bytes_recv++; // count the Bytes Received by getting Data from the FIFO
+      if(byte == 10) (canReceive) = false;
+      bytesReceived++; // count the Bytes Received by getting Data from the FIFO
+      }
+      break;
     }
-   }
+  }
+  }
 }
 
 void USART2_IRQHandler(void)
