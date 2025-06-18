@@ -1,0 +1,28 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "cppbuild",
+			"label": "C/C++: arm-none-eabi-gcc.exe build active file",
+			"command": "C:/Users/User/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-gcc.exe",
+			"args": [
+				"-fdiagnostics-color=always",
+				"-g",
+				"${file}",
+				"-o",
+				"${fileDirname}\\${fileBasenameNoExtension}.exe",
+				"-mthumb",
+				"-mcpu=cortex-m0",
+				""
+			],
+			"options": {
+				"cwd": "C:/Users/User/.platformio/packages/toolchain-gccarmnoneeabi/bin"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build",
+			"detail": "compiler: C:/Users/User/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-gcc.exe"
+		}
+	]
+}

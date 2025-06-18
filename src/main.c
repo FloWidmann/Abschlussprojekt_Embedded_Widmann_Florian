@@ -10,9 +10,10 @@
 #define LOG(msg...) printf(msg)
 // Select the Baudrate for the UART
 #define BAUDRATE 115200 // Baud rate set to 9600 baud per second
-
+#define MESSAGEBUFFERSIZE FIFO_SIZE
 
 volatile Fifo_t usart_rx_fifo;
+volatile Fifo_t usart_tx_fifo;
 const uint8_t USART2_RX_PIN = 3; // PA3 is used as USART2_RX
 const uint8_t USART2_TX_PIN = 2; // PA2 is used as USART2_TX
 
@@ -20,7 +21,9 @@ const uint8_t USART2_TX_PIN = 2; // PA2 is used as USART2_TX
 typedef enum State
 {
   INIT,
-  GETTING_ATTACKED,
+  SENDING_AFFIRMATION,
+  RECEIVING_CHECKSUM,
+  SENDING_CHECKSUM,
   ATTACKING,
   END
 
@@ -47,7 +50,8 @@ void init_uart()
   NVIC_SetPriority(USART2_IRQn, uart_pri_encoding);          // Set USART2 interrupt priority
   NVIC_EnableIRQ(USART2_IRQn);                               // Enable USART2 interrupt
 
-  fifo_init((Fifo_t *)&usart_rx_fifo);                       // Init the FIFO
+  fifo_init((Fifo_t *)&usart_rx_fifo); 
+  fifo_init((Fifo_t *)&usart_tx_fifo);                      // Init the FIFO
 }
 
 
@@ -59,7 +63,6 @@ int _write(int handle, char* data, int size) {
       while (!(USART2->ISR & USART_ISR_TXE)) {
       }
       USART2->TDR = *data++;
-
   }
   return size;
 }
@@ -69,52 +72,108 @@ void clean_message(char* inputMessage, int max_size) {
     for(int i = 0; i < max_size; i++) {
         if(inputMessage[i] == '\n') {
             inputMessage[i] = '\0';
-            break;        }
+            break;        
+          }
     }
 }
 
+void set_back_variables(bool* canReceive, uint32_t* bytesReceived, char* messageBuffer)
+{
+  *canReceive = false;
+  *bytesReceived = 0;
+   memset(messageBuffer, 0, MESSAGEBUFFERSIZE);
+}
 
+void init_function(State* gameState, bool* canReceive, uint32_t* bytesReceived, char* messageBuffer)
+{
+  uint8_t byte;
+}
 
+void sending_affirmation_function(State* gameState)
+{
+    LOG("DH_START_FLORIAN\r\n");
+    *gameState = RECEIVING_CHECKSUM;
+}
 
 
 
 int main(void)
 {
-  char messageBuffer[10] = { 0 }; //not const char* as usual because we have different chars
-  int diff = 0;
-  LOG("Init System");
+  
+  char messageBuffer[MESSAGEBUFFERSIZE] = { 0 }; //not const char* as usual because we have different chars
   init_uart();
-  uint32_t bytesReceived = 0;
+  uint32_t bytesReceived = 0;  
+  const char message[] = "DH_START_FLORIAN\r\n";
   State gameState = INIT;
   bool canReceive = false;
-  bool canSend = false;
-
+  
   for (;;)
   { // Infinite loop
+    uint8_t byte;
+    
     switch (gameState)
     {
-    case(INIT):
-    {
-    uint8_t byte;
-    if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0)
-    {
-      //for now this works, look for better solution
-      if(byte == 72) canReceive = true;
-      if(bytesReceived < 10 && canReceive) messageBuffer[bytesReceived] = byte;
-      else
-      {
-        clean_message(messageBuffer, 10);
-        if(strcmp(messageBuffer, "HD_START\r") == 0) 
+      case(INIT):
         {
-          gameState = ATTACKING;
+          if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0)
+          {
+            //for now this works, look for better solution
+            if(byte == 72) canReceive = true;
+            if(bytesReceived < strlen("HD_START") && canReceive)
+            {
+                messageBuffer[bytesReceived] = byte;
+                bytesReceived++;
+            }
+           else
+            {
+                clean_message(messageBuffer, strlen("HD_START"));
+            if(strcmp(messageBuffer, "HD_START") == 0) 
+              {
+                set_back_variables(&canReceive, &bytesReceived, messageBuffer);
+                (gameState) = SENDING_AFFIRMATION;
+              }
+            }
+            if(byte == 10) (canReceive) = false;
+          }
+          break;
         }
+      case(SENDING_AFFIRMATION):
+      {
+        sending_affirmation_function(&gameState);
+        break;
       }
-      if(byte == 10) (canReceive) = false;
-      bytesReceived++; // count the Bytes Received by getting Data from the FIFO
+    
+      case(RECEIVING_CHECKSUM):
+      { 
+          if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0)
+          {
+            //for now this works, look for better solution
+            if(byte == 72) canReceive = true;
+            if(bytesReceived < strlen("HD_CS_0123456789") && canReceive) 
+            {
+              messageBuffer[bytesReceived] = byte;
+              bytesReceived++;
+            }
+            else
+            {
+              if(strncmp(messageBuffer,"HD_CS_", strlen("HD_CS_")) == 0) 
+                {
+                  set_back_variables(&canReceive, &bytesReceived, messageBuffer);
+                  (gameState) = SENDING_CHECKSUM;
+                }
+              }
+            if(byte == 10) (canReceive) = false;
+             // count the Bytes Received by getting Data from the FIFO
+          }
+          break;
       }
-      break;
+
+      case(SENDING_CHECKSUM):
+      {
+        LOG("DH_CS_3152260515\r\n");
+        break;
+      }
     }
-  }
   }
 }
 
