@@ -3,9 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdbool.h>
 #include "dynamic_array.h"
 #include "clock_.h"
 #include "fifo.h"
+
 
 #define LOG(msg...) printf(msg)
 // Select the Baudrate for the UART
@@ -18,16 +20,28 @@ const uint8_t USART2_RX_PIN = 3; // PA3 is used as USART2_RX
 const uint8_t USART2_TX_PIN = 2; // PA2 is used as USART2_TX
 
 
+
 typedef enum State
 {
-  INIT,
-  SENDING_AFFIRMATION,
-  RECEIVING_CHECKSUM,
+  RECEIVING,
+  SENDING_START,
   SENDING_CHECKSUM,
-  ATTACKING,
+  SENDING_BOOM,
+  SENDING_VICTORY,
+  SENDING_DEFEAT,
   END
 
 }State;
+
+
+//global variables with prefix g for easier debugging
+char gMessageBuffer[MESSAGEBUFFERSIZE] = { 0 }; //not const char* as usual because we have different chars
+uint32_t gBytesReceived = 0;  
+State gGameState = RECEIVING;
+bool gCanReceive = false;
+  
+
+
 
 void init_uart()
 {
@@ -77,104 +91,102 @@ void clean_message(char* inputMessage, int max_size) {
     }
 }
 
-void set_back_variables(bool* canReceive, uint32_t* bytesReceived, char* messageBuffer)
-{
-  *canReceive = false;
-  *bytesReceived = 0;
-   memset(messageBuffer, 0, MESSAGEBUFFERSIZE);
-}
-
-void init_function(State* gameState, bool* canReceive, uint32_t* bytesReceived, char* messageBuffer)
-{
-  uint8_t byte;
-}
-
-void sending_affirmation_function(State* gameState)
-{
-    LOG("DH_START_FLORIAN\r\n");
-    *gameState = RECEIVING_CHECKSUM;
-}
 
 
 
 int main(void)
 {
-  
-  char messageBuffer[MESSAGEBUFFERSIZE] = { 0 }; //not const char* as usual because we have different chars
   init_uart();
-  uint32_t bytesReceived = 0;  
-  const char message[] = "DH_START_FLORIAN\r\n";
-  State gameState = INIT;
+  gBytesReceived = 0;
+  gGameState = RECEIVING;
   bool canReceive = false;
-  
+
+
   for (;;)
   { // Infinite loop
-    uint8_t byte;
-    
-    switch (gameState)
+     uint8_t byte;
+    switch (gGameState)
     {
-      case(INIT):
-        {
-          if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0)
-          {
-            //for now this works, look for better solution
-            if(byte == 72) canReceive = true;
-            if(bytesReceived < strlen("HD_START") && canReceive)
-            {
-                messageBuffer[bytesReceived] = byte;
-                bytesReceived++;
-            }
-           else
-            {
-                clean_message(messageBuffer, strlen("HD_START"));
-            if(strcmp(messageBuffer, "HD_START") == 0) 
-              {
-                set_back_variables(&canReceive, &bytesReceived, messageBuffer);
-                (gameState) = SENDING_AFFIRMATION;
-              }
-            }
-            if(byte == 10) (canReceive) = false;
-          }
-          break;
-        }
-      case(SENDING_AFFIRMATION):
+      case(RECEIVING):
       {
-        sending_affirmation_function(&gameState);
-        break;
-      }
-    
-      case(RECEIVING_CHECKSUM):
-      { 
-          if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0)
+        if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0)
+        {
+          
+          if(gBytesReceived < MESSAGEBUFFERSIZE && canReceive)
           {
-            //for now this works, look for better solution
-            if(byte == 72) canReceive = true;
-            if(bytesReceived < strlen("HD_CS_0123456789") && canReceive) 
-            {
-              messageBuffer[bytesReceived] = byte;
-              bytesReceived++;
-            }
-            else
-            {
-              if(strncmp(messageBuffer,"HD_CS_", strlen("HD_CS_")) == 0) 
-                {
-                  set_back_variables(&canReceive, &bytesReceived, messageBuffer);
-                  (gameState) = SENDING_CHECKSUM;
-                }
-              }
-            if(byte == 10) (canReceive) = false;
-             // count the Bytes Received by getting Data from the FIFO
+              gMessageBuffer[gBytesReceived] = byte;
           }
+
+          gBytesReceived++; // count the Bytes Received by getting Data from the FIFO 
+          
+          if(strcmp(gMessageBuffer, "HD_START") == 0)
+          {
+              gGameState = SENDING_START;
+              gBytesReceived = 0;
+              memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);
+              canReceive = false;
+          }
+
+          if(strncmp(gMessageBuffer, "HD_CS_", strlen("HD_CS_")) == 0)
+          {
+              gGameState = SENDING_CHECKSUM;
+              gBytesReceived = 0;
+              memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);
+              canReceive = false;
+          }
+
+          if(strncmp(gMessageBuffer, "HD_BOOM_", strlen("HD_BOOM_")) == 0)
+          {
+              gGameState = SENDING_BOOM;
+              gBytesReceived = 0;
+              memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);
+              canReceive = false;
+          }
+          
+          if(strcmp(gMessageBuffer, "HD_SF") == 0)
+          {
+              gGameState = SENDING_DEFEAT;
+              gBytesReceived = 0;
+              memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);
+              canReceive = false;
+          }
+
+          
+          if(byte == '\n') 
+          {
+            canReceive = true;
+            gBytesReceived = 0;
+          }
+
+          }
+
+          break;
+        
+      }     
+      
+      case(SENDING_START):
+      {
+          LOG("DH_START_FLORIAN\r\n");
+          gGameState = RECEIVING;
           break;
       }
-
+      
       case(SENDING_CHECKSUM):
       {
-        LOG("DH_CS_3152260515\r\n");
+        LOG("DH_CS_012345689\r\n");
+        gGameState = RECEIVING;
+        break;
+      }
+
+      case(SENDING_BOOM)
+      {
+        LOG("DH_BOOM_9_9");
+        gGameState = RECEIVING;
         break;
       }
     }
   }
+
 }
 
 void USART2_IRQHandler(void)
