@@ -9,7 +9,7 @@
 #include <time.h>
 #include "clock_.h"
 #include "fifo.h"
-//#include "init_timer.h"
+#include "init_timer.h"
 #include "init_uart.h"
 #include "init_enums_structs.h"
 #include "init_playing_field.h"
@@ -78,18 +78,17 @@ void set_back_variables(bool* canReceive)
 int main(void)
 {
   init_uart();
-//  init_timer15();
+  init_timer15();
   gBytesReceived = 0;
   gGameState = RECEIVING;
   bool canReceive = false;
   //Enums are defined in Header init_enums_structs
   int playingField[ROWS * COLUMNS] = { EMPTY_FIELD };
-  srand(TIM15->CNT);  // Zufälliger Startwert vom Timerzähler
-  fill_playing_field(playingField);
-
+         
+           
   for (;;)
   { // Infinite loop
-     uint8_t byte;
+    uint8_t byte;
     switch (gGameState)
     {
       case(RECEIVING):
@@ -152,20 +151,25 @@ int main(void)
       case(SENDING_START):
       {
           LOG("DH_START_FLORIAN\r\n");
+          unsigned int seed = TIM15->CNT;
+          srand(seed);  // Zufälliger Startwert vom Timerzähler
+          fill_playing_field(playingField);
+          TIM15->CR1 &= ~0b1 << 0; // Disable the Timer
           gGameState = RECEIVING;
           break;
       }
       
       case(SENDING_CHECKSUM):
       {
-        LOG("DH_CS_012345689\r\n");
+        char* msg = return_checksum_message(playingField);
+        LOG(msg);
         gGameState = RECEIVING;
         break;
       }
 
       case(SENDING_BOOM):
       {
-        LOG("DH_BOOM_9_9");
+        LOG("DH_BOOM_9_9\r\n");
         gGameState = RECEIVING;
         break;
       }

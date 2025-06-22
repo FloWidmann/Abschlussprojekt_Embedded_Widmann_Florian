@@ -10,6 +10,7 @@
 
 void fill_playing_field(int* playingField);
 void placeShip(int* field, int startX, int startY, int shipLength, int directionX, int directionY);
+char* return_checksum_message(int* field);
 bool canPlaceShip(int* playingField, int startX, int startY, int shipLength, int directionX, int directionY);
 
 

@@ -18,7 +18,6 @@ bool canPlaceShip(int* playingField, int startX, int startY, int shipLength, int
 //void placeShip(int* playingField, int startX, int startY, int shipLength, int directionX, int directionY)
 void placeShip(int* field, int startX, int startY, int shipLength, int directionX, int directionY) {
 
-
 	//place ships
 	for (int i = 0; i < shipLength; i++) {
 		int x = startX + directionX * i;
@@ -83,3 +82,33 @@ void fill_playing_field(int* playingField)
 		}
 	}
 }
+
+
+
+char* return_checksum_message(int* playingField)
+{
+    static char message[20] = "DH_CS_";	//has to be static because the pointer is deleted after function -> dangling pointer
+    //static variables are stored in .data segment and exist during run-time. they are only visible inside the scope of function
+	int index = 6; // after "DH_CS_"
+
+    for (int y = 0; y < ROWS; y++) 
+    {
+        int sum = 0;
+        for (int x = 0; x < COLUMNS; x++) 
+        {
+            int value = playingField[y * COLUMNS + x];
+            if (value == 1) 
+            {
+                sum++;
+            }
+        }
+        message[index++] = '0' + sum;  // Voraussetzung: sum ist 0–9
+    }
+
+    message[index++] = '\r';
+    message[index++] = '\n';
+    message[index] = '\0';
+
+    return message;
+}
+
