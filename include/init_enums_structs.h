@@ -1,0 +1,27 @@
+#ifndef INIT_ENUMS_H
+#define INIT_ENUMS_H
+
+typedef enum State
+{
+  RECEIVING,
+  SENDING_START,
+  SENDING_CHECKSUM,
+  SENDING_BOOM,
+  SENDING_VICTORY,
+  SENDING_DEFEAT,
+  END
+
+}State;
+
+typedef struct IntTuple
+{
+	int typeShip;
+	int amountShips;
+
+}IntTuple;
+
+enum SHIPS { SCHLACHTSCHIFF = 5, KREUZER = 4, ZERSTOERER = 3, U_BOOT = 2 };
+enum FIELD_OCCUPATIONS { EMPTY_FIELD = 0, SHIP = 1, NEIGHBOUR_FIELD = 9 }; 
+
+
+#endif // !INIT_ENUMS_H

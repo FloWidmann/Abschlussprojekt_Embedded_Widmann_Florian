@@ -1,5 +1,6 @@
 #include "clock_.h"
 
+
 /**
  * @brief  System Clock Configuration
  *         The system Clock is configured as follow :
@@ -25,7 +26,6 @@ void SystemClock_Config(void)
 
   // activate the internal 48 MHz clock
   RCC->CR2 |= RCC_CR2_HSI48ON;
-
   // wait for clock to become stable before continuing
   while (!(RCC->CR2 & RCC_CR2_HSI48RDY))
     ;

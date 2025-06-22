@@ -1,3 +1,6 @@
+#ifndef FIFO_H
+#define FIFO_H
+
 #include <stm32f0xx.h>
 
 #define FIFO_SIZE 64
@@ -15,3 +18,5 @@ typedef struct {
 void fifo_init(Fifo_t* fifo);
 int fifo_put(Fifo_t* fifo, uint8_t data);
 int fifo_get(Fifo_t* fifo, uint8_t* data);
+
+#endif // !FIFO_H

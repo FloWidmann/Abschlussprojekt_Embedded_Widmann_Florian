@@ -64,5 +64,6 @@
   "C_Cpp_Runner.msvcSecureNoWarnings": false,
   "files.associations": {
     "fifo.h": "c"
-  }
+  },
+  "C_Cpp.errorSquiggles": "enabled"
 }

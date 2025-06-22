@@ -1,37 +1,24 @@
 #include <main.h>
 #include <stm32f0xx.h>
+#include "stm32f091xc.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdbool.h>
-#include "dynamic_array.h"
+#include <time.h>
 #include "clock_.h"
 #include "fifo.h"
-
+//#include "init_timer.h"
+#include "init_uart.h"
+#include "init_enums_structs.h"
+#include "init_playing_field.h"
 
 #define LOG(msg...) printf(msg)
 // Select the Baudrate for the UART
-#define BAUDRATE 115200 // Baud rate set to 9600 baud per second
+
 #define MESSAGEBUFFERSIZE FIFO_SIZE
 
-volatile Fifo_t usart_rx_fifo;
-volatile Fifo_t usart_tx_fifo;
-const uint8_t USART2_RX_PIN = 3; // PA3 is used as USART2_RX
-const uint8_t USART2_TX_PIN = 2; // PA2 is used as USART2_TX
-
-
-
-typedef enum State
-{
-  RECEIVING,
-  SENDING_START,
-  SENDING_CHECKSUM,
-  SENDING_BOOM,
-  SENDING_VICTORY,
-  SENDING_DEFEAT,
-  END
-
-}State;
 
 
 //global variables with prefix g for easier debugging
@@ -40,34 +27,6 @@ uint32_t gBytesReceived = 0;
 State gGameState = RECEIVING;
 bool gCanReceive = false;
   
-
-
-
-void init_uart()
-{
-   SystemClock_Config(); // Configure the system clock to 48 MHz
-  RCC->AHBENR |= RCC_AHBENR_GPIOAEN;    // Enable GPIOA clock
-  RCC->APB1ENR |= RCC_APB1ENR_USART2EN; // Enable USART2 clock
-  GPIOA->MODER |= 0b10 << (USART2_TX_PIN * 2);    // Set PA2 to Alternate Function mode
-  GPIOA->AFR[0] |= 0b0001 << (4 * USART2_TX_PIN); // Set AF for PA2 (USART2_TX)
-  GPIOA->MODER |= 0b10 << (USART2_RX_PIN * 2);    // Set PA3 to Alternate Function mode
-  GPIOA->AFR[0] |= 0b0001 << (4 * USART2_RX_PIN); // Set AF for PA3 (USART2_RX)
-
-  USART2->BRR = (APB_FREQ / BAUDRATE); // Set baud rate (requires APB_FREQ to be defined)
-  USART2->CR1 |= 0b1 << 2;             // Enable receiver (RE bit)
-  USART2->CR1 |= 0b1 << 3;             // Enable transmitter (TE bit)
-  USART2->CR1 |= 0b1 << 0;             // Enable USART (UE bit)
-  USART2->CR1 |= 0b1 << 5;             // Enable RXNE interrupt (RXNEIE bit)
-
-  NVIC_SetPriorityGrouping(0);                               // Use 4 bits for priority, 0 bits for subpriority
-  uint32_t uart_pri_encoding = NVIC_EncodePriority(0, 1, 0); // Encode priority: group 1, subpriority 0
-  NVIC_SetPriority(USART2_IRQn, uart_pri_encoding);          // Set USART2 interrupt priority
-  NVIC_EnableIRQ(USART2_IRQn);                               // Enable USART2 interrupt
-
-  fifo_init((Fifo_t *)&usart_rx_fifo); 
-  fifo_init((Fifo_t *)&usart_tx_fifo);                      // Init the FIFO
-}
-
 
 // For supporting printf function we override the _write function to redirect the output to UART
 int _write(int handle, char* data, int size) {
@@ -82,6 +41,7 @@ int _write(int handle, char* data, int size) {
 }
 
 
+
 void clean_message(char* inputMessage, int max_size) {
     for(int i = 0; i < max_size; i++) {
         if(inputMessage[i] == '\n') {
@@ -91,16 +51,41 @@ void clean_message(char* inputMessage, int max_size) {
     }
 }
 
+int sum_of_check_sum(const char* message) 
+{
+    int sum = 0;
+    for (int i = 6; i < 16; i++) 
+    { 
+        if (message[i] >= '0' && message[i] <= '9') 
+        {
+            sum += message[i] - '0'; //message[i] return int value of ascii symbol, subtract '0' to get actual value
+        }
+    }
+    return sum;
+}
+
+void set_back_variables(bool* canReceive)
+{
+  *canReceive = false;
+  gBytesReceived = 0;
+  memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);            
+}
+
+
 
 
 
 int main(void)
 {
   init_uart();
+//  init_timer15();
   gBytesReceived = 0;
   gGameState = RECEIVING;
   bool canReceive = false;
-
+  //Enums are defined in Header init_enums_structs
+  int playingField[ROWS * COLUMNS] = { EMPTY_FIELD };
+  srand(TIM15->CNT);  // Zufälliger Startwert vom Timerzähler
+  fill_playing_field(playingField);
 
   for (;;)
   { // Infinite loop
@@ -122,33 +107,33 @@ int main(void)
           if(strcmp(gMessageBuffer, "HD_START") == 0)
           {
               gGameState = SENDING_START;
-              gBytesReceived = 0;
-              memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);
-              canReceive = false;
+              set_back_variables(&canReceive);
           }
 
-          if(strncmp(gMessageBuffer, "HD_CS_", strlen("HD_CS_")) == 0)
+          if(strncmp(gMessageBuffer, "HD_CS_", strlen("HD_CS_")) == 0 && gBytesReceived >= strlen("HD_CS_0123456789"))
           {
-              gGameState = SENDING_CHECKSUM;
-              gBytesReceived = 0;
-              memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);
-              canReceive = false;
+              if(sum_of_check_sum(gMessageBuffer) <= 30)
+              { 
+                gGameState = SENDING_CHECKSUM;
+              }
+              else
+              {
+                gGameState = SENDING_VICTORY;
+              }
+              set_back_variables(&canReceive);
           }
 
-          if(strncmp(gMessageBuffer, "HD_BOOM_", strlen("HD_BOOM_")) == 0)
+          if(strncmp(gMessageBuffer, "HD_BOOM_", strlen("HD_BOOM_")) == 0 && gBytesReceived >= strlen("HD_BOOM_0_0"))
           {
               gGameState = SENDING_BOOM;
-              gBytesReceived = 0;
-              memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);
-              canReceive = false;
+              set_back_variables(&canReceive);
+          
           }
           
           if(strcmp(gMessageBuffer, "HD_SF") == 0)
           {
               gGameState = SENDING_DEFEAT;
-              gBytesReceived = 0;
-              memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);
-              canReceive = false;
+              set_back_variables(&canReceive);
           }
 
           
@@ -178,7 +163,7 @@ int main(void)
         break;
       }
 
-      case(SENDING_BOOM)
+      case(SENDING_BOOM):
       {
         LOG("DH_BOOM_9_9");
         gGameState = RECEIVING;
