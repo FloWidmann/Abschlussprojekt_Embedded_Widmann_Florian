@@ -9,14 +9,14 @@
 #include <time.h>
 #include "clock_.h"
 #include "fifo.h"
-#include "init_timer.h"
+#include "init_adc.h"
 #include "init_uart.h"
 #include "init_enums_structs.h"
 #include "init_playing_field.h"
 
 #define LOG(msg...) printf(msg)
 // Select the Baudrate for the UART
-
+#define TIMEOUT 100000
 #define MESSAGEBUFFERSIZE FIFO_SIZE
 
 
@@ -72,19 +72,34 @@ void set_back_variables(bool* canReceive)
 }
 
 
-
+uint32_t return_adc_seed()
+{
+  uint32_t seed = 0;                                  // Variable to store the ADC converted value
+  ADC1->CR |= 0b1 << 2;                                  // Start ADC conversion by setting ADSTART bit
+  while ((ADC1->ISR & ADC_ISR_EOC) == 0) {           // Wait for End Of Conversion flag (EOC)
+            if (timeout(TIMEOUT)){                         // Check for timeout during wait
+                error();                                   // Handle timeout error
+            }
+        }   
+  seed = ADC1->DR;   
+  return seed;
+}
 
 
 int main(void)
 {
   init_uart();
-  init_timer15();
+  init_adc();
   gBytesReceived = 0;
   gGameState = RECEIVING;
   bool canReceive = false;
   //Enums are defined in Header init_enums_structs
   int playingField[ROWS * COLUMNS] = { EMPTY_FIELD };
-         
+  uint32_t seed = return_adc_seed();
+  
+  srand(seed);
+  fill_playing_field(playingField);
+          
            
   for (;;)
   { // Infinite loop
@@ -151,10 +166,6 @@ int main(void)
       case(SENDING_START):
       {
           LOG("DH_START_FLORIAN\r\n");
-          unsigned int seed = TIM15->CNT;
-          srand(seed);  // Zufälliger Startwert vom Timerzähler
-          fill_playing_field(playingField);
-          TIM15->CR1 &= ~0b1 << 0; // Disable the Timer
           gGameState = RECEIVING;
           break;
       }
