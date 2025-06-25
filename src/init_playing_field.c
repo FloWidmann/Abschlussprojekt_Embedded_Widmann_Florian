@@ -1,11 +1,10 @@
 #include "init_playing_field.h"
 
-
-bool canPlaceShip(int* playingField, int startX, int startY, int shipLength, int directionX, int directionY)
+bool canPlaceShip(int* gMyPlayingField, int startX, int startY, int shipLength, int directionX, int directionY)
 {
 	for (int i = 0; i < shipLength; i++)
 	{
-		if (playingField[(startY + directionY * i) * ROWS + (startX + directionX * i)] == 0 && startX + directionX * i >= 0 && startX + directionX * i < ROWS && startY + directionY * i >= 0 && startY + directionY * i < COLUMNS)
+		if (gMyPlayingField[(startY + directionY * i) * ROWS + (startX + directionX * i)] == 0 && startX + directionX * i >= 0 && startX + directionX * i < ROWS && startY + directionY * i >= 0 && startY + directionY * i < COLUMNS)
 		{}
 		else
 		{
@@ -15,16 +14,15 @@ bool canPlaceShip(int* playingField, int startX, int startY, int shipLength, int
 	return true;
 }
 
-//void placeShip(int* playingField, int startX, int startY, int shipLength, int directionX, int directionY)
+//void placeShip(int* gMyPlayingField, int startX, int startY, int shipLength, int directionX, int directionY)
 void placeShip(int* field, int startX, int startY, int shipLength, int directionX, int directionY) {
 
-	//place ships
+	//place ships, the length of ship equal it´s type
 	for (int i = 0; i < shipLength; i++) {
 		int x = startX + directionX * i;
 		int y = startY + directionY * i;
-		field[y * ROWS + x] = 1;
+		field[y * ROWS + x] = shipLength;
 	}
-
 
 	//mark surrounding fields as 9 - ships are not allowed to be placed there
 	for (int i = 0; i < shipLength; i++) 
@@ -51,8 +49,17 @@ void placeShip(int* field, int startX, int startY, int shipLength, int direction
 	}
 }
 
+void clean_up_array(int* gMyPlayingField)
+{
+	//remove 9s and replaces them with 0
+	for(int i = 0; i < ROWS * COLUMNS; i++)
+	{
+		if(gMyPlayingField[i] == 9) gMyPlayingField[i] = 0;
+	}
+}
 
-void fill_playing_field(int* playingField)
+
+void fill_playing_field(int* gMyPlayingField)
 {
 	const int directions[4][2] = { {0,-1}, {0,1}, {-1,0}, {1,0} };
 	IntTuple amountOfShips[] = { {SCHLACHTSCHIFF, 1}, {KREUZER, 2}, {ZERSTOERER, 3}, {U_BOOT, 4} };
@@ -67,9 +74,9 @@ void fill_playing_field(int* playingField)
 		int randPosY = rand() % ROWS;
 		int shipDirection = rand() % 4;
 
-		if (canPlaceShip(playingField, randPosX, randPosY, amountOfShips[shipIndex].typeShip, directions[shipDirection][0], directions[shipDirection][1]))
+		if (canPlaceShip(gMyPlayingField, randPosX, randPosY, amountOfShips[shipIndex].typeShip, directions[shipDirection][0], directions[shipDirection][1]))
 		{
-			placeShip(playingField, randPosX, randPosY, amountOfShips[shipIndex].typeShip, directions[shipDirection][0], directions[shipDirection][1]);
+			placeShip(gMyPlayingField, randPosX, randPosY, amountOfShips[shipIndex].typeShip, directions[shipDirection][0], directions[shipDirection][1]);
 			currentAmountOfShips++;
 
 			if (currentAmountOfShips >= amountOfShips[shipIndex].amountShips)
@@ -77,15 +84,14 @@ void fill_playing_field(int* playingField)
 				currentAmountOfShips = 0;
 				shipIndex++;
 			}
-
-
 		}
 	}
+	clean_up_array(gMyPlayingField);
 }
 
 
 
-char* return_checksum_message(int* playingField)
+char* return_checksum_message(int* gMyPlayingField)
 {
     static char message[20] = "DH_CS_";	//has to be static because the pointer is deleted after function -> dangling pointer
     //static variables are stored in .data segment and exist during run-time. they are only visible inside the scope of function
@@ -96,8 +102,8 @@ char* return_checksum_message(int* playingField)
         int sum = 0;
         for (int x = 0; x < COLUMNS; x++) 
         {
-            int value = playingField[y * COLUMNS + x];
-            if (value == 1) 
+            int value = gMyPlayingField[y * COLUMNS + x];
+            if (value != 0) 
             {
                 sum++;
             }
