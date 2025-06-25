@@ -25,12 +25,13 @@
 char gMessageBuffer[MESSAGEBUFFERSIZE] = { 0 }; //not const char* as usual because we have different chars
 uint32_t gBytesReceived = 0;  
 State gGameState = RECEIVING;
-bool gCanReceive = false;
 int gMyShipParts = 30;
 int gEnemyShipParts = 30;  
 int gShootingPosition = 0;
 int gMyPlayingField[ROWS * COLUMNS] = { EMPTY_FIELD };
 int allShots[200];
+uint32_t gSeed = 0;
+
 
 // For supporting printf function we override the _write function to redirect the output to UART
 int _write(int handle, char* data, int size) {
@@ -68,17 +69,23 @@ int sum_of_check_sum(const char* message)
     return sum;
 }
 
-void set_back_playing_variables(bool* canReceive)
+void set_back_playing_variables()
 {
-  *canReceive = false;
   gBytesReceived = 0;
   memset(gMessageBuffer, 0, MESSAGEBUFFERSIZE);            
 }
 
-void set_back_all_variables(bool* canReceive)
+void set_back_all_variables()
 {
-
-
+  set_back_playing_variables();
+  
+  gGameState = RECEIVING;
+  gMyShipParts = 30;
+  gEnemyShipParts = 30;  
+  gShootingPosition = 0;
+  //memset(gMyPlayingField, EMPTY_FIELD, ROWS * COLUMNS * sizeof(gMyPlayingField[0]));
+  memset(allShots, 0, 200 * sizeof(allShots[0]));
+  gSeed++;
 }
 
 
@@ -115,9 +122,9 @@ char* return_boom_message()
     //static variables are stored in .data segment and exist during run-time. they are only visible inside the scope of function
     int posY = gShootingPosition / ROWS;
     int posX = gShootingPosition % ROWS;
-    message[8] = posX + '0';
+    message[8] = posY + '0';
     message[9] = '_';
-    message[10] = posY + '0';
+    message[10] = posX + '0';
     message[11] = '\r';
     message[12] = '\n';
     message[13] = '\0';
@@ -149,86 +156,81 @@ int main(void)
   init_adc();
   gBytesReceived = 0;
   gGameState = RECEIVING;
-  bool canReceive = false;
-  int iteration = 0;
-  unsigned int index = 0;
-  bool sendBoom = false;
- 
+
   //Enums are defined in Header init_enums_structs
- 
+
   int enemyPlayingField[ROWS * COLUMNS] = { EMPTY_FIELD };
-  uint32_t seed = return_adc_seed();
-  srand(0);
-  fill_playing_field(gMyPlayingField);         
-           
+
+  gSeed = return_adc_seed();
+  
+          
   for (;;)
   { // Infinite loop
+    //178
     uint8_t byte;
     switch (gGameState)
     {
       case(RECEIVING):
-{
-    if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0)
-    {
-        
-        if (gBytesReceived < MESSAGEBUFFERSIZE)
-        {
-            gMessageBuffer[gBytesReceived++] = byte;
-        }
-
-        if (byte == '\n')
-        {
-            if (strncmp(gMessageBuffer, "HD_START", strlen("HD_START")) == 0)
-            {
-                gGameState = SENDING_START;
-            }
-            else if (strncmp(gMessageBuffer, "HD_CS_", strlen("HD_CS_")) == 0 &&
-                     strlen(gMessageBuffer) >= strlen("HD_CS_0123456789"))
-            {
-                if (sum_of_check_sum(gMessageBuffer) <= 30)
-                {
-                    gGameState = SENDING_CHECKSUM;
-                }
-                else
-                {
-                    gGameState = SENDING_VICTORY;
-                }
-            }
-            else if (strncmp(gMessageBuffer, "HD_BOOM_", strlen("HD_BOOM_")) == 0 &&
-                     strlen(gMessageBuffer) >= strlen("HD_BOOM_0_0"))
-            {
-                int x = gMessageBuffer[10] - '0';
-                int y = gMessageBuffer[8] - '0';
-                
-                //Added this if condition to avoid a weird bug
-                if(x >= 0 && x < 10 && y >= 0 && y < 10)
-                {
-                allShots[index++] = x;
-                allShots[index++] = y;
-
-                if (gMyPlayingField[y * 10 + x] != 0 && gMyShipParts > 1)
-                {
-                    gGameState = SENDING_HIT;
-                }
-                else if (!was_hit() && gMyShipParts > 1)
-                {
-                    gGameState = SENDING_MISS;
-                }
-                else
-                {
-                    gGameState = SENDING_DEFEAT;
-                }
-                }
+          {
+          if (fifo_get((Fifo_t *)&usart_rx_fifo, &byte) == 0)
+          {
+              
+              if (gBytesReceived < MESSAGEBUFFERSIZE)
+              {
+                  gMessageBuffer[gBytesReceived++] = byte;
               }
-            
-          
 
-            // Nach Verarbeitung: Variablen zurücksetzen
-            set_back_playing_variables(&canReceive);
-        }
-    }
-    break;
-}
+              if (byte == '\n')
+              {
+                  if (strncmp(gMessageBuffer, "HD_START", strlen("HD_START")) == 0)
+                  {
+                      srand(gSeed);
+                      fill_playing_field(gMyPlayingField);         
+                      gGameState = SENDING_START;
+                  }
+                  else if (strncmp(gMessageBuffer, "HD_CS_", strlen("HD_CS_")) == 0 &&
+                          strlen(gMessageBuffer) >= strlen("HD_CS_0123456789"))
+                  {
+                      if (sum_of_check_sum(gMessageBuffer) <= 30)
+                      {
+                          gGameState = SENDING_CHECKSUM;
+                      }
+                      else
+                      {
+                          gGameState = SENDING_VICTORY;
+                      }
+                  }
+                  else if (strncmp(gMessageBuffer, "HD_BOOM_", strlen("HD_BOOM_")) == 0 &&
+                          strlen(gMessageBuffer) >= strlen("HD_BOOM_0_0"))
+                  {
+                      int x = gMessageBuffer[10] - '0';
+                      int y = gMessageBuffer[8] - '0';
+                      
+                      //Added this if condition to avoid a weird bug
+                      if(x >= 0 && x < 10 && y >= 0 && y < 10)
+                      {
+                      //allShots[index++] = x;
+                      //allShots[index++] = y;
+
+                      if (gMyPlayingField[y * 10 + x] != 0 && gMyShipParts > 1)
+                      {
+                          gGameState = SENDING_HIT;
+                      }
+                      else if (!was_hit() && gMyShipParts > 1)
+                      {
+                          gGameState = SENDING_MISS;
+                      }
+                      else
+                      {
+                          gGameState = SENDING_DEFEAT;
+                      }
+                      }
+                    }
+                  set_back_playing_variables();
+              }
+          }
+          break;
+      }
 
      
       
@@ -268,7 +270,7 @@ int main(void)
         //evaluate_boom_position(enemyPlayingField);
         char* msg = return_boom_message();
 
-        LOG("DH_BOOM_9_9\r\n");
+        LOG(msg);
         gGameState = RECEIVING;
         break;
       }
@@ -280,9 +282,18 @@ int main(void)
         {
           char* msg = return_defeat_message(i);
           LOG(return_defeat_message(i));
+          set_back_all_variables();
         }
-       
+
+        //set_back_all_variables();
+        gSeed++;
+        for(int i = 0; i < ROWS * COLUMNS; i++)
+        {
+          gMyPlayingField[i] = 0;
+        }
+        gBytesReceived = 0;
         gGameState = RECEIVING;
+
         break;
       }
     }
